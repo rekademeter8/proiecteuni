@@ -1,0 +1,58 @@
+#define BLYNK_TEMPLATE_ID "TMPL4EaKXKP6R"
+#define BLYNK_TEMPLATE_NAME "RC"
+#define BLYNK_AUTH_TOKEN "XGucHly275k55qDxXio4CqTBstSiVKxj"
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+// WiFi credentials
+char ssid[] = "TP-LINK_7C8530";
+char pass[] = "camera12345";
+
+// Define Arduino pin connections
+#define MODE_PIN D2  // Connected to Arduino pin 11
+#define MOTOR_PIN D3 // Connected to Arduino pin 12
+
+// Track the states
+bool modeState = false;   // false = Auto, true = Manual
+bool motorState = false;  // false = OFF, true = ON
+
+void setup() {
+  // Initialize serial communication for debugging
+  Serial.begin(115200);
+
+  // Set up WiFi and Blynk connection
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  // Set pin modes
+  pinMode(MODE_PIN, OUTPUT);
+  pinMode(MOTOR_PIN, OUTPUT);
+
+  // Ensure both pins start LOW
+  digitalWrite(MODE_PIN, LOW);
+  digitalWrite(MOTOR_PIN, LOW);
+}
+
+void loop() {
+  Blynk.run();
+}
+
+// Toggle mode (manual/auto) on button press
+BLYNK_WRITE(V0) {
+  if (param.asInt() == 1) { // Button pressed
+    modeState = !modeState; // Toggle mode state
+    digitalWrite(MODE_PIN, modeState ? HIGH : LOW);
+    Serial.print("Mode toggled to: ");
+    Serial.println(modeState ? "Manual" : "Auto");
+  }
+}
+
+// Toggle motor (on/off) on button press in manual mode
+BLYNK_WRITE(V1) {
+  if (param.asInt() == 1) { // Button pressed
+    motorState = !motorState; // Toggle motor state
+    digitalWrite(MOTOR_PIN, motorState ? HIGH : LOW);
+    Serial.print("Motor state toggled to: ");
+    Serial.println(motorState ? "ON" : "OFF");
+  }
+}

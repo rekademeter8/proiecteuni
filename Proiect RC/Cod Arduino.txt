@@ -1,0 +1,112 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+const int sensor_pin = A0;         // Moisture sensor
+const int relay_pin = 7;           // Relay for motor
+const int moisture_start = 1000;   // Moisture threshold to start motor
+const int moisture_stop = 980;     // Moisture threshold to stop motor
+
+// Buttons and NodeMCU pins
+const int button_mode_pin = 8;     // Physical button to switch mode
+const int button_pump_pin = 9;     // Physical button to toggle pump
+const int pin_mode = 11;           // NodeMCU pin for mode control
+const int pin_motor = 12;          // NodeMCU pin for motor control
+
+bool is_manual_mode = false;       // Start in auto mode
+bool motor_state = true;          // Start with motor OFF
+bool last_button_mode_state = HIGH;
+bool last_button_pump_state = HIGH;
+bool last_nodemcu_mode_state = LOW;  // For NodeMCU pin 11
+bool last_nodemcu_motor_state = LOW; // For NodeMCU pin 12
+unsigned long last_debounce_time_mode = 0;
+unsigned long last_debounce_time_pump = 0;
+unsigned long debounce_delay = 50; // Debounce time in milliseconds
+
+void setup() {
+  lcd.begin(16, 2);
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Initializing...");
+  
+  pinMode(sensor_pin, INPUT);
+  pinMode(relay_pin, OUTPUT);
+
+  // Physical buttons
+  pinMode(button_mode_pin, INPUT_PULLUP);
+  pinMode(button_pump_pin, INPUT_PULLUP);
+
+  // NodeMCU pins
+  pinMode(pin_mode, INPUT_PULLUP);  // Use pull-up resistor
+  pinMode(pin_motor, INPUT_PULLUP); // Use pull-up resistor
+  
+  digitalWrite(relay_pin, LOW);  // Motor OFF (initial state)
+  delay(1000);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Mode: Auto");
+  lcd.setCursor(0, 1);
+  lcd.print("Motor: OFF");
+}
+
+void loop() {
+  unsigned long current_time = millis();
+
+  // Handle Mode Control (Physical Button and NodeMCU Pin)
+  bool button_mode_state = digitalRead(button_mode_pin);
+  bool nodemcu_mode_state = digitalRead(pin_mode);
+  if ((button_mode_state == LOW && (current_time - last_debounce_time_mode) > debounce_delay && last_button_mode_state == HIGH) || 
+      (nodemcu_mode_state == HIGH && last_nodemcu_mode_state == LOW)) {
+    last_debounce_time_mode = current_time;
+    is_manual_mode = !is_manual_mode;
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Mode: ");
+    lcd.print(is_manual_mode ? "Manual" : "Auto");
+  }
+  last_button_mode_state = button_mode_state;
+  last_nodemcu_mode_state = nodemcu_mode_state;
+
+  // Handle Motor Control (Physical Button and NodeMCU Pin) in Manual Mode
+  if (is_manual_mode) {
+    bool button_pump_state = digitalRead(button_pump_pin);
+    bool nodemcu_motor_state = digitalRead(pin_motor);
+    if ((button_pump_state == LOW && (current_time - last_debounce_time_pump) > debounce_delay && last_button_pump_state == HIGH) || 
+        (nodemcu_motor_state == HIGH && last_nodemcu_motor_state == LOW)) {
+      last_debounce_time_pump = current_time;
+      motor_state = !motor_state;
+      digitalWrite(relay_pin, motor_state ? HIGH : LOW);  // Toggle motor
+      lcd.setCursor(0, 1);
+      lcd.print("Motor: ");
+      lcd.print(motor_state ? "ON " : "OFF");
+    }
+    last_button_pump_state = button_pump_state;
+    last_nodemcu_motor_state = nodemcu_motor_state;
+  } else {
+    // Auto Mode: Read the moisture sensor
+    int sensor_value = analogRead(sensor_pin);
+
+    // Control motor based on sensor value
+    if (sensor_value > moisture_start) {
+      motor_state = false;
+      digitalWrite(relay_pin, LOW);  // Motor OFF
+    } else if (sensor_value < moisture_stop) {
+      motor_state = true;
+      digitalWrite(relay_pin, HIGH);  // Motor ON
+    }
+
+    // Display sensor value and mode
+    lcd.setCursor(0, 0);
+    lcd.print("Sensor: ");
+    lcd.print(sensor_value);
+    lcd.print("   ");
+    lcd.setCursor(0, 1);
+    lcd.print("Mode: ");
+    lcd.print(is_manual_mode ? "Manual" : "Auto");
+    lcd.print(" ");
+    lcd.print(motor_state ? "ON " : "OFF");
+  }
+
+  delay(50); // Stability delay
+}
